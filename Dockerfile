@@ -6,9 +6,10 @@ FROM debian:jessie
 
 MAINTAINER Pedro Ângelo <pangelo@void.io>
 
-ENV LF_CORE_VERSION 3.0.4
-ENV LF_FEND_VERSION 3.0.4
-ENV LF_WMCP_VERSION 1.2.6
+ENV LF_CORE_VERSION 3.2.2
+ENV LF_FEND_VERSION 3.2.1
+ENV LF_WMCP_VERSION 2.1.0
+ENV LF_MOONBRIDGE_VERSION 1.0.1
 
 #
 # install dependencies
@@ -17,17 +18,21 @@ ENV LF_WMCP_VERSION 1.2.6
 RUN apt-get update && apt-get -y install \
         build-essential \
         exim4 \
+        pmake \
+        curl \
         imagemagick \
-        liblua5.1-0-dev \
+        liblua5.2-dev \
         libpq-dev \
         lighttpd \
-        lua5.1 \
+        lua5.2 \
         mercurial \
         postgresql \
         postgresql-server-dev-9.4 \
         python-pip \
     && pip install markdown2
-    
+
+RUN DEBIAN_FRONTEND=noninteractive apt-get -y install libbsd-dev
+
 #
 # prepare file tree
 #
@@ -37,30 +42,33 @@ RUN mkdir -p /opt/lf/sources/patches \
              /opt/lf/sources/scripts \
              /opt/lf/bin
 
-WORKDIR /opt/lf/sources
-
-RUN hg clone -r v${LF_CORE_VERSION} http://www.public-software-group.org/mercurial/liquid_feedback_core/ ./core \
-    && hg clone -r v${LF_FEND_VERSION} http://www.public-software-group.org/mercurial/liquid_feedback_frontend/ ./frontend \
-    && hg clone -r v${LF_WMCP_VERSION} http://www.public-software-group.org/mercurial/webmcp ./webmcp
+RUN cd /opt/lf/sources \
+    && hg clone -u v${LF_CORE_VERSION} http://www.public-software-group.org/mercurial/liquid_feedback_core/ ./core \
+    && hg clone -u v${LF_FEND_VERSION} http://www.public-software-group.org/mercurial/liquid_feedback_frontend/ ./frontend \
+    && hg clone -u v${LF_WMCP_VERSION} http://www.public-software-group.org/mercurial/webmcp ./webmcp \
+    && hg clone -u v${LF_MOONBRIDGE_VERSION} http://www.public-software-group.org/mercurial/moonbridge ./moonbridge
 
 #
 # build core
 #
 
-WORKDIR /opt/lf/sources/core
-
-RUN make \
+RUN cd /opt/lf/sources/core \
+    && make \
     && cp lf_update lf_update_issue_order lf_update_suggestion_order /opt/lf/bin
+
+#
+# build Moonbridge
+#
+
+RUN cd /opt/lf/sources/moonbridge \
+    && pmake MOONBR_LUA_PATH=/opt/lf/moonbridge/?.lua \
+    && cp -R /opt/lf/sources/moonbridge /opt/lf/moonbridge
 
 #
 # build WebMCP
 #
 
-COPY ./patches/webmcp_build.patch /opt/lf/sources/patches/
-
-WORKDIR /opt/lf/sources/webmcp
-
-RUN patch -p1 -i /opt/lf/sources/patches/webmcp_build.patch \
+RUN cd /opt/lf/sources/webmcp \
     && make \
     && mkdir /opt/lf/webmcp \
     && cp -RL framework/* /opt/lf/webmcp
@@ -69,9 +77,8 @@ RUN patch -p1 -i /opt/lf/sources/patches/webmcp_build.patch \
 # build frontend
 #
 
-WORKDIR /opt/lf/
-
-RUN cd /opt/lf/sources/frontend \
+RUN cd /opt/lf/ \
+    && cd /opt/lf/sources/frontend \
     && hg archive -t files /opt/lf/frontend \
     && cd /opt/lf/frontend/fastpath \
     && make \
@@ -81,8 +88,16 @@ RUN cd /opt/lf/sources/frontend \
 # setup db
 #
 
+#WORKDIR /opt/lf
+
 COPY ./scripts/setup_db.sql /opt/lf/sources/scripts/
 COPY ./scripts/config_db.sql /opt/lf/sources/scripts/
+
+RUN  cp /opt/lf/sources/core/core.sql /opt/lf/core.sql
+RUN  cp -R /opt/lf/sources/core/update/ /opt/lf/update
+#COPY scripts/core.sql.patch /opt/lf/
+#RUN patch /opt/lf/core.sql /opt/lf/core.sql.patch
+#RUN  cp /opt/lf/sources/core/core.sql /opt/lf/core.sql.orig
 
 RUN addgroup --system lf \
     && adduser --system --ingroup lf --no-create-home --disabled-password lf \
@@ -98,6 +113,7 @@ RUN addgroup --system lf \
 
 RUN rm -rf /opt/lf/sources \
     && apt-get -y purge \
+        pmake \
         build-essential \
         liblua5.1-0-dev \
         libpq-dev \
@@ -112,6 +128,8 @@ RUN rm -rf /opt/lf/sources \
 #
 
 # TODO: configure mail system
+
+RUN DEBIAN_FRONTEND=noninteractive apt-get install -y ssmtp
 
 # webserver config
 COPY ./scripts/60-liquidfeedback.conf /etc/lighttpd/conf-available/
@@ -131,7 +149,7 @@ COPY ./scripts/start.sh /opt/lf/bin/
 # ready to go
 #
 
-EXPOSE 80
+EXPOSE 8080
 
 WORKDIR /opt/lf/frontend
 

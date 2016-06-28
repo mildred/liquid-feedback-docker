@@ -1,0 +1,32 @@
+version: '2'
+services:
+  db:
+    image: postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: lf
+    volumes:
+      - "${LF_DIR}/pgdata:/var/lib/postgresql/data"
+  web:
+    image: liquid-feedback
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${LF_HTTP_PORT}:8080"
+    depends_on:
+      - db
+    links:
+      - db:db
+    environment:
+      DB_ENGINE: postgresql
+      DB_NAME: lf
+      DB_USER: postgres
+      DB_PASS: postgres
+      DB_HOST: db
+      INVITE_CODE: "${LF_INVITE_CODE}"
+      SMTP_HOST: "${LF_SMTP}"
+      LF_HOSTNAME: "${LF_HOST}"
+
+
