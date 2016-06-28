@@ -15,11 +15,11 @@ ENV LF_MOONBRIDGE_VERSION 1.0.1
 # install dependencies
 #
 
-RUN apt-get update && apt-get -y install \
+RUN export DEBIAN_FRONTEND=noninteractive; \
+    apt-get update && apt-get -y install \
         build-essential \
-        exim4 \
+        ssmtp \
         pmake \
-        curl \
         imagemagick \
         liblua5.2-dev \
         libpq-dev \
@@ -29,9 +29,8 @@ RUN apt-get update && apt-get -y install \
         postgresql \
         postgresql-server-dev-9.4 \
         python-pip \
+        libbsd-dev \
     && pip install markdown2
-
-RUN DEBIAN_FRONTEND=noninteractive apt-get -y install libbsd-dev
 
 #
 # prepare file tree
@@ -95,9 +94,6 @@ COPY ./scripts/config_db.sql /opt/lf/sources/scripts/
 
 RUN  cp /opt/lf/sources/core/core.sql /opt/lf/core.sql
 RUN  cp -R /opt/lf/sources/core/update/ /opt/lf/update
-#COPY scripts/core.sql.patch /opt/lf/
-#RUN patch /opt/lf/core.sql /opt/lf/core.sql.patch
-#RUN  cp /opt/lf/sources/core/core.sql /opt/lf/core.sql.orig
 
 RUN addgroup --system lf \
     && adduser --system --ingroup lf --no-create-home --disabled-password lf \
@@ -127,9 +123,6 @@ RUN rm -rf /opt/lf/sources \
 # configure everything
 #
 
-# TODO: configure mail system
-
-RUN DEBIAN_FRONTEND=noninteractive apt-get install -y ssmtp
 
 # webserver config
 COPY ./scripts/60-liquidfeedback.conf /etc/lighttpd/conf-available/
